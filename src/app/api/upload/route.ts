@@ -1,9 +1,9 @@
 // 画像アップロード(質問/回答に添付 → OGP疑似画像用)
+// 匿名からの投稿を許可する(質問箱の匿名性のため)。ファイルサイズ/形式で制限。
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
-import { userFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +18,6 @@ const EXT: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const user = await userFromRequest(req.headers.get("authorization"));
-  if (!user) return NextResponse.json({ ok: false, error: "ログインが必要です" }, { status: 401 });
-
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!file || typeof file === "string") {

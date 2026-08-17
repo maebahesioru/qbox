@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "@/lib/auth-context";
-import { AuthPanel } from "@/components/auth-panel";
+import Link from "next/link";
 import { ImageInput } from "@/components/image-input";
 
 type QuestionType = "direct" | "multi" | "all";
@@ -71,60 +70,85 @@ function TargetSelect({ type, value, onChange }: { type: QuestionType; value: st
   );
 }
 
+// 自分の質問編集トークンの保存/取得(localStorage・未ログイン質問の管理用)
+export function saveMyQuestion(qid: string, editToken: string) {
+  try {
+    const raw = localStorage.getItem("qbox_my_questions");
+    const map = raw ? JSON.parse(raw) : {};
+    map[qid] = editToken;
+    localStorage.setItem("qbox_my_questions", JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+
+export function isMyQuestion(qid: string): boolean {
+  try {
+    const raw = localStorage.getItem("qbox_my_questions");
+    return raw ? qid in JSON.parse(raw) : false;
+  } catch {
+    return false;
+  }
+}
+
+export function getEditToken(qid: string): string | null {
+  try {
+    const raw = localStorage.getItem("qbox_my_questions");
+    const map = raw ? JSON.parse(raw) : {};
+    return map[qid] || null;
+  } catch {
+    return null;
+  }
+}
+
 export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreated, compact }: {
   defaultType?: QuestionType;
   toUserIds?: string[];
   onCreated?: () => void;
   compact?: boolean;
 }) {
-  const { me, token } = useAuth();
   const [type, setType] = useState<QuestionType>(defaultType);
   const [toUserIds, setToUserIds] = useState<string[]>(fixedTo || []);
+  const [fromName, setFromName] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [image, setImage] = useState<string | null>(null);
-  const [postToX, setPostToX] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<null | { qid: string }>(null);
 
   useEffect(() => {
     if (fixedTo) setToUserIds(fixedTo);
   }, [fixedTo?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function submit() {
+  const submit = useCallback(async () => {
     setError(""); setBusy(true);
     try {
       const res = await fetch("/api/questions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ type, toUserIds, title, body, image, postToX }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, toUserIds, fromName, title, body, image }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error || "投稿に失敗しました");
         return;
       }
-      setTitle(""); setBody(""); setImage(null); setPostToX(false);
+      // 編集トークンを保存(ベストアンサー選定に使用)
+      saveMyQuestion(data.question.id, data.editToken);
+      setTitle(""); setBody(""); setImage(null); setFromName("");
       if (!fixedTo) { setToUserIds([]); setType("all"); }
-      setDone(true);
-      setTimeout(() => setDone(false), 3000);
-      onCreated?.();
+      setDone({ qid: data.question.id });
+      if (onCreated) onCreated();
     } finally {
       setBusy(false);
     }
-  }
-
-  if (!me) {
-    return <AuthPanel />;
-  }
+  }, [type, toUserIds, fromName, title, body, image, fixedTo, onCreated]);
 
   return (
     <div className="rounded-2xl border border-borderline bg-panel p-5">
       <h2 className="mb-3 font-bold">新しい質問</h2>
+      <p className="mb-3 text-xs text-mut">
+        未ログイン・匿名で質問できます。相手に知られたくない名前や内容でもOK。
+      </p>
 
       <div className="mb-3 grid grid-cols-3 gap-2">
         {([
@@ -151,6 +175,13 @@ export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreate
       )}
 
       <div className="space-y-3">
+        <input
+          value={fromName}
+          onChange={(e) => setFromName(e.target.value)}
+          placeholder="ニックネーム(任意・空欄なら匿名)"
+          maxLength={30}
+          className="w-full rounded-lg border border-borderline bg-background px-3 py-2 outline-none focus:border-x"
+        />
         {!compact && (
           <input
             value={title}
@@ -168,17 +199,8 @@ export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreate
           rows={compact ? 2 : 4}
           className="w-full resize-y rounded-lg border border-borderline bg-background px-3 py-2 outline-none focus:border-x"
         />
-        <div className="flex items-center justify-between gap-3">
-          <ImageInput onChange={setImage} label="添付画像は質問ページのOGP画像になり、Xでリンクを貼ると画像がプレビュー表示されます(疑似画像貼り付け)" />
-          <div className="shrink-0">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input type="checkbox" checked={postToX} onChange={(e) => setPostToX(e.target.checked)} className="h-4 w-4 accent-[#1d9bf0]" />
-              <span>Xにも投稿</span>
-            </label>
-          </div>
-        </div>
+        <ImageInput onChange={setImage} label="添付画像は質問ページのOGP画像になり、Xでリンクを貼ると画像がプレビュー表示されます(疑似画像貼り付け)" />
         {error && <p className="text-sm text-red-400">{error}</p>}
-        {done && <p className="text-sm text-green-400">✓ 質問を投稿しました</p>}
         <button
           onClick={submit}
           disabled={busy || !body.trim()}
@@ -186,6 +208,17 @@ export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreate
         >
           {busy ? "投稿中..." : "質問を送信"}
         </button>
+        {done && (
+          <div className="rounded-xl border border-green-500/40 bg-green-500/10 p-3 text-sm">
+            <p className="font-bold text-green-400">✓ 質問を投稿しました</p>
+            <p className="mt-1 text-mut">
+              ベストアンサー選定などの管理用URL:
+            </p>
+            <Link href={`/q/${done.qid}`} className="text-x hover:underline">
+              質問ページを開く →
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

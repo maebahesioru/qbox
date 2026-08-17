@@ -1,4 +1,4 @@
-// 質問詳細(OGB/OGP疑似画像対応)
+// 質問詳細(OGP/疑似画像対応)
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getQuestion, getAnswersForQuestion } from "@/lib/data";
@@ -44,24 +44,29 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
   if (!q) notFound();
 
   const mask = (n: string) => (n ? `${n.slice(0, 2)}••${n.slice(-2)}` : "");
+  // 表示名解決: アカウント紐付け→ニックネーム→匿名
+  const resolveName = (account: string | null, name: string) => {
+    if (account && users[account]) {
+      return { display: users[account].displayName, masked: mask(account), anonymous: false };
+    }
+    if (name) return { display: name, masked: "", anonymous: false };
+    return { display: "匿名", masked: "", anonymous: true };
+  };
 
   const serialized = {
     question: {
       ...q,
-      fromDisplay: q.fromAccount
-        ? { name: users[q.fromAccount]?.displayName || "不明", masked: mask(q.fromAccount) }
-        : null,
+      editToken: undefined,
+      fromUser: resolveName(q.fromAccount, q.fromName),
       toDisplay: q.toUserIds.map((tid) => ({
         id: tid,
         name: users[tid]?.displayName || "不明",
-        masked: mask(tid),
       })),
     },
     answers: answers.map((a) => ({
       ...a,
-      user: users[a.fromAccount]
-        ? { name: users[a.fromAccount].displayName || "不明", masked: mask(a.fromAccount) }
-        : null,
+      editToken: undefined,
+      user: resolveName(a.fromAccount, a.fromName),
       isBest: q.bestAnswerId === a.id,
     })),
   };

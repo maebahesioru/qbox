@@ -1,7 +1,7 @@
-// 質問詳細
+// 質問詳細(誰でも閲覧可)
 import { NextRequest, NextResponse } from "next/server";
 import { getQuestion, getAnswersForQuestion } from "@/lib/data";
-import { getUsers } from "@/lib/auth";
+import { userFromRequest, getUsers } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,26 +13,31 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const answers = await getAnswersForQuestion(id);
   const users = await getUsers();
 
-  // ユーザー情報を付与(番号はマスク、表示名は公開)
-  const mask = (n: string) => (n ? `${n.slice(0, 2)}••${n.slice(-2)}` : null);
-  const toUsers = q.toUserIds.map((id) => ({
-    accountNumber: id,
-    displayName: users[id]?.displayName || "不明",
-    masked: mask(id),
+  const mask = (n: string) => (n ? `${n.slice(0, 2)}••${n.slice(-2)}` : "");
+  // 表示名解決: アカウント紐付け→ニックネーム→匿名
+  const resolveName = (account: string | null, name: string): { display: string; masked: string; anonymous: boolean } => {
+    if (account && users[account]) {
+      return { display: users[account].displayName, masked: mask(account), anonymous: false };
+    }
+    if (name) return { display: name, masked: "", anonymous: false };
+    return { display: "匿名", masked: "", anonymous: true };
+  };
+
+  const fromUser = resolveName(q.fromAccount, q.fromName);
+  const toUsers = q.toUserIds.map((tid) => ({
+    accountNumber: tid,
+    displayName: users[tid]?.displayName || "不明",
+    masked: mask(tid),
   }));
 
   return NextResponse.json({
     ok: true,
-    question: q,
+    question: { ...q, editToken: undefined },
     toUsers,
-    fromUser: q.fromAccount && users[q.fromAccount]
-      ? { accountNumber: q.fromAccount, displayName: users[q.fromAccount].displayName, masked: mask(q.fromAccount) }
-      : null,
+    fromUser,
     answers: answers.map((a) => ({
-      ...a,
-      user: users[a.fromAccount]
-        ? { accountNumber: a.fromAccount, displayName: users[a.fromAccount].displayName, masked: mask(a.fromAccount) }
-        : null,
+      ...a, editToken: undefined,
+      user: resolveName(a.fromAccount, a.fromName),
     })),
   });
 }

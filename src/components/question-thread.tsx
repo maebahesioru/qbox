@@ -2,24 +2,26 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { AuthPanel } from "@/components/auth-panel";
 import { ImageInput } from "@/components/image-input";
 import { QUESTION_TYPE_LABEL } from "@/lib/const";
 import type { QuestionType } from "@/lib/const";
+import { isMyQuestion, getEditToken, saveMyQuestion } from "@/components/question-form";
+import { xShareUrl, questionShareText, answerShareText } from "@/lib/xpost";
 
-interface AnsUser {
-  name: string;
+interface ThreadUser {
+  display: string;
   masked: string;
+  anonymous: boolean;
 }
 
 interface ThreadAns {
   id: string;
-  fromAccount: string;
+  fromAccount: string | null;
+  fromName: string;
   body: string;
   image: string | null;
-  xUrl: string | null;
   createdAt: string;
-  user: AnsUser | null;
+  user: ThreadUser;
   isBest: boolean;
 }
 
@@ -29,15 +31,15 @@ interface ThreadData {
     type: QuestionType;
     toUserIds: string[];
     fromAccount: string | null;
+    fromName: string;
     title: string;
     body: string;
     image: string | null;
-    xUrl: string | null;
     status: "open" | "closed";
     bestAnswerId: string | null;
     createdAt: string;
-    fromDisplay: AnsUser | null;
-    toDisplay: { id: string; name: string; masked: string }[];
+    fromUser: ThreadUser;
+    toDisplay: { id: string; name: string }[];
   };
   answers: ThreadAns[];
 }
@@ -52,50 +54,60 @@ export function QuestionThread({ initial, questionUrl }: {
   initial: ThreadData;
   questionUrl: string;
 }) {
-  const { me, token } = useAuth();
+  const { me } = useAuth();
   const [q, setQ] = useState(initial.question);
   const [answers, setAnswers] = useState<ThreadAns[]>(initial.answers);
   const [body, setBody] = useState("");
+  const [fromName, setFromName] = useState("");
   const [image, setImage] = useState<string | null>(null);
-  const [postToX, setPostToX] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const isOwner = me && q.fromAccount === me.accountNumber;
+  // 「自分が質問したか」= localStorageの編集トークン or ログイン中の質問者
+  const mine = isMyQuestion(q.id) || (!!me && q.fromAccount === me.accountNumber);
 
   async function submitAnswer() {
-    if (!token || !me) return;
     setError(""); setBusy(true);
     try {
+      const token = sessionStorage.getItem("qbox_token");
       const res = await fetch(`/api/questions/${q.id}/answers`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ body, image, postToX }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ body, fromName, image }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error || "回答に失敗しました");
         return;
       }
+      saveMyQuestion(q.id, data.editToken ?? "");
+      const display = fromName.trim() || "匿名";
       setAnswers((prev) => [
         ...prev,
-        { ...data.answer, isBest: false, user: { name: me.displayName, masked: `${me.accountNumber.slice(0, 2)}••${me.accountNumber.slice(-2)}` } },
+        { ...data.answer, isBest: false, user: { display, masked: "", anonymous: !fromName.trim() } },
       ]);
-      setBody(""); setImage(null); setPostToX(false);
+      setBody(""); setImage(null); setFromName("");
     } finally {
       setBusy(false);
     }
   }
 
   async function chooseBest(answerId: string) {
-    if (!token) return;
     setBusy(true); setError("");
     try {
+      const token = sessionStorage.getItem("qbox_token");
+      const editToken = getEditToken(q.id) || "";
       const res = await fetch(`/api/questions/${q.id}/best`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ answerId }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ answerId, editToken }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -117,6 +129,8 @@ export function QuestionThread({ initial, questionUrl }: {
     } catch { /* ignore */ }
   }
 
+  const shareLink = xShareUrl(questionShareText(q), questionUrl);
+
   return (
     <div className="space-y-4">
       {/* 質問表示 */}
@@ -129,6 +143,7 @@ export function QuestionThread({ initial, questionUrl }: {
             <span className="rounded-full bg-best/20 px-2 py-0.5 font-bold text-best">解決済み ✓</span>
           )}
           <span className="text-mut">{fmt(q.createdAt)}</span>
+          {mine && <span className="rounded-full bg-[#2f3336] px-2 py-0.5 text-mut">あなたの質問</span>}
         </div>
 
         {q.title && <h1 className="mb-2 text-xl font-bold leading-snug">{q.title}</h1>}
@@ -153,21 +168,25 @@ export function QuestionThread({ initial, questionUrl }: {
             )}
           </span>
           <span className="ml-auto">
-            {q.fromDisplay ? (
-              <>質問者: <span className="text-mut">{q.fromDisplay.name}({q.fromDisplay.masked})</span></>
-            ) : (
-              <span>質問者: 匿名</span>
-            )}
+            質問者: <span className={q.fromUser.anonymous ? "" : "font-bold"}>{q.fromUser.display}</span>
+            {q.fromUser.masked && <span className="text-mut">({q.fromUser.masked})</span>}
           </span>
         </div>
 
-        {/* X投稿用URLコピー(OGP疑似画像の使い方) */}
+        {/* X拡散: 各自が自分のXアカウントでURLを貼る(OGB画像で疑似画像も再現) */}
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-black/30 p-3 text-sm">
-          <span className="text-mut">Xに貼り付けて質問を拡散:</span>
-          <code className="flex-1 truncate rounded bg-black/40 px-2 py-1 text-xs text-x">{questionUrl}</code>
+          <span className="text-mut">Xでシェア(自分のアカウントで投稿):</span>
+          <a
+            href={shareLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg bg-x px-3 py-1.5 text-xs font-bold text-white"
+          >
+            ✕ この質問をポスト
+          </a>
           <button
             onClick={copyUrl}
-            className="rounded-lg bg-x px-3 py-1.5 text-xs font-bold text-white"
+            className="rounded-lg bg-[#2f3336] px-3 py-1.5 text-xs font-bold text-mut hover:text-white"
           >
             {copied ? "コピーしました ✓" : "URLをコピー"}
           </button>
@@ -177,12 +196,17 @@ export function QuestionThread({ initial, questionUrl }: {
       {/* 回答フォーム */}
       <section className="rounded-2xl border border-borderline bg-panel p-5">
         <h2 className="mb-3 font-bold">回答する</h2>
-        {!me ? (
-          <AuthPanel />
-        ) : q.status === "closed" ? (
+        {q.status === "closed" ? (
           <p className="text-sm text-mut">この質問は解決済みのため、これ以上の回答はできません。</p>
         ) : (
           <div className="space-y-3">
+            <input
+              value={fromName}
+              onChange={(e) => setFromName(e.target.value)}
+              placeholder="ニックネーム(任意・空欄なら匿名)"
+              maxLength={30}
+              className="w-full rounded-lg border border-borderline bg-background px-3 py-2 outline-none focus:border-x"
+            />
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -191,13 +215,7 @@ export function QuestionThread({ initial, questionUrl }: {
               rows={4}
               className="w-full resize-y rounded-lg border border-borderline bg-background px-3 py-2 outline-none focus:border-x"
             />
-            <div className="flex items-center justify-between gap-3">
-              <ImageInput onChange={setImage} label="画像付き回答はOGP画像としてXでプレビューされます" />
-              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" checked={postToX} onChange={(e) => setPostToX(e.target.checked)} className="h-4 w-4 accent-[#1d9bf0]" />
-                <span>Xにも投稿(知恵アンサー)</span>
-              </label>
-            </div>
+            <ImageInput onChange={setImage} label="回答の画像もXでのOGPプレビューに使えます(各自でXに貼り付けて投稿)" />
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button
               onClick={submitAnswer}
@@ -206,6 +224,9 @@ export function QuestionThread({ initial, questionUrl }: {
             >
               {busy ? "送信中..." : "回答を送信"}
             </button>
+            <p className="text-xs text-mut">
+              回答した後、各回答の「✕ この回答をポスト」から自分のXアカウントで知恵アンサーを投稿できます。
+            </p>
           </div>
         )}
       </section>
@@ -221,21 +242,25 @@ export function QuestionThread({ initial, questionUrl }: {
           answers.map((a) => (
             <div key={a.id} className={`rounded-2xl border bg-panel p-4 ${a.isBest ? "border-best/60" : "border-borderline"}`}>
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-mut">
-                <span className="font-bold text-foreground">{a.user?.name || "不明"}</span>
-                <span>{a.user?.masked}</span>
+                <span className={`${a.user.anonymous ? "" : "font-bold"} text-foreground`}>{a.user.display}</span>
                 <span>{fmt(a.createdAt)}</span>
                 {a.isBest && <span className="rounded-full bg-best/20 px-2 py-0.5 font-bold text-best">ベストアンサー ★</span>}
-                {a.xUrl && (
-                  <a href={a.xUrl} target="_blank" rel="noopener noreferrer" className="text-x hover:underline">✕ ポストを見る</a>
-                )}
               </div>
               <p className="whitespace-pre-wrap leading-relaxed">{a.body}</p>
               {a.image && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.image} alt="回答画像" className="mt-2 aspect-video w-full max-w-xs rounded-lg border border-borderline object-cover" />
               )}
-              {isOwner && q.status === "open" && !a.isBest && (
-                <div className="mt-3">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <a
+                  href={xShareUrl(answerShareText(a), questionUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg bg-[#2f3336] px-3 py-1.5 text-xs font-bold text-mut hover:text-white"
+                >
+                  ✕ この回答をポスト(自分のXで)
+                </a>
+                {mine && q.status === "open" && !a.isBest && (
                   <button
                     onClick={() => chooseBest(a.id)}
                     disabled={busy}
@@ -243,9 +268,9 @@ export function QuestionThread({ initial, questionUrl }: {
                   >
                     ★ この回答をベストアンサーに選んで解決する
                   </button>
-                </div>
-              )}
-              {isOwner && a.isBest && (
+                )}
+              </div>
+              {mine && a.isBest && (
                 <p className="mt-2 text-xs text-best/80">この回答をベストアンサーに選びました。質問は解決済みです。</p>
               )}
             </div>

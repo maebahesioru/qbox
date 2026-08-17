@@ -13,7 +13,10 @@ export function QuestionCard({ q, users, answerCount, myAccount }: {
   answerCount: number;
   myAccount?: string | null;
 }) {
-  const fromName = q.fromAccount ? (users[q.fromAccount]?.displayName || "不明") : "匿名";
+  // 質問者表示: アカウント紐付け→ニックネーム→匿名
+  let fromName = "匿名";
+  if (q.fromAccount && users[q.fromAccount]) fromName = users[q.fromAccount].displayName;
+  else if (q.fromName) fromName = q.fromName;
   const targets = q.toUserIds.map((id) => users[id]?.displayName || "不明");
   const isMine = q.fromAccount && q.fromAccount === myAccount;
   const resolved = q.status === "closed";

@@ -11,8 +11,14 @@ export default async function UsersPage() {
   // ユーザーごとの質問数/回答数
   const qCount = new Map<string, number>();
   const aCount = new Map<string, number>();
-  for (const q of qs) qCount.set(q.fromAccount || "", (qCount.get(q.fromAccount || "") || 0) + 1);
-  for (const a of answers) aCount.set(a.fromAccount, (aCount.get(a.fromAccount) || 0) + 1);
+  for (const q of qs) {
+    const k = q.fromAccount || "";
+    qCount.set(k, (qCount.get(k) || 0) + 1);
+  }
+  for (const a of answers) {
+    const k = a.fromAccount || "";
+    aCount.set(k, (aCount.get(k) || 0) + 1);
+  }
 
   return (
     <div className="space-y-5">

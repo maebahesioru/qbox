@@ -1,25 +1,25 @@
 // 質問の作成・一覧取得
+// 質問はログイン不要・匿名で投稿できる(質問箱の本質)
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { getUsers, userFromRequest } from "@/lib/auth";
 import { genId, getQuestions, saveQuestions, Question, QuestionType } from "@/lib/data";
-import { xPost, siteUrl } from "@/lib/xpost";
 
 export const dynamic = "force-dynamic";
 
 // 質問一覧
-// ?type=direct|multi|all&to=<accountNumber>&mine=true
+// ?type=direct|multi|all&to=<accountNumber>&mine=true(ログイン中・自分の質問)
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const type = sp.get("type");
   const to = sp.get("to");
   const mine = sp.get("mine") === "true";
-  const auth = req.headers.get("authorization");
-  const me = await userFromRequest(auth);
 
   let qs = await getQuestions();
   if (type) qs = qs.filter((q) => q.type === type);
   if (to) qs = qs.filter((q) => q.toUserIds.includes(to));
   if (mine) {
+    const me = await userFromRequest(req.headers.get("authorization"));
     if (!me) return NextResponse.json({ ok: false, error: "ログインが必要です" }, { status: 401 });
     qs = qs.filter((q) => q.fromAccount === me.accountNumber || q.toUserIds.includes(me.accountNumber));
   }
@@ -27,12 +27,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, questions: qs });
 }
 
-// 質問作成
+// 質問作成(未ログイン可・匿名)
 export async function POST(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  const me = await userFromRequest(auth);
-  if (!me) return NextResponse.json({ ok: false, error: "ログインが必要です" }, { status: 401 });
-
   const body = await req.json().catch(() => ({}));
   const type = body.type as QuestionType;
   if (!["direct", "multi", "all"].includes(type)) {
@@ -41,6 +37,7 @@ export async function POST(req: NextRequest) {
 
   const title = String(body.title || "").trim();
   const text = String(body.body || "").trim();
+  const fromName = String(body.fromName || "").trim().slice(0, 30);
   if (!text) {
     return NextResponse.json({ ok: false, error: "質問内容を入力してください" }, { status: 400 });
   }
@@ -64,13 +61,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ログイン済みならアカウント紐付け(未ログインはnull=完全匿名)
+  const me = await userFromRequest(req.headers.get("authorization"));
+
   const image = body.image && typeof body.image === "string" ? String(body.image).slice(0, 500) : null;
   const now = new Date().toISOString();
   const q: Question = {
     id: genId("q"),
     type,
     toUserIds,
-    fromAccount: me.accountNumber,
+    fromAccount: me ? me.accountNumber : null,
+    fromName,
+    editToken: randomBytes(16).toString("hex"),
     title,
     body: text,
     image,
@@ -85,21 +87,10 @@ export async function POST(req: NextRequest) {
   qs.push(q);
   await saveQuestions(qs);
 
-  // X投稿オプション
-  const postToX = body.postToX === true;
-  if (postToX) {
-    const qUrl = siteUrl(`/q/${q.id}`);
-    const typeLabel = type === "all" ? "全体質問" : type === "multi" ? "複数人質問" : "個別質問";
-    const targets = toUserIds.length
-      ? ` (${toUserIds.map((id) => id.slice(0, 4)).join(", ")}...)`
-      : "";
-    const txt = [`【質問箱】${title || typeLabel}${targets}`, "", text, "", qUrl].join("\n");
-    const r = await xPost(txt);
-    if (r.ok) {
-      q.xUrl = r.url || null;
-      await saveQuestions(qs);
-    }
-  }
-
-  return NextResponse.json({ ok: true, question: q }, { status: 201 });
+  // 編集トークンはレスポンスでのみ返す(ブラウザのlocalStorageに保存・再取得不可)
+  return NextResponse.json({
+    ok: true,
+    question: { ...q, editToken: undefined },
+    editToken: q.editToken,
+  }, { status: 201 });
 }
