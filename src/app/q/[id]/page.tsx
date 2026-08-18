@@ -16,7 +16,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const title = q.title ? `${q.title} | QBOX` : "QBOXの質問";
   const description = q.body.slice(0, 120);
   const url = siteUrl(`/q/${q.id}`);
-  const image = q.image ? siteUrl(q.image) : undefined;
+  // 質問の本文をそのまま画像化したOGP(実質画像の貼り付け)
+  const image = siteUrl(`/api/og/${q.id}`);
 
   return {
     title,
@@ -27,13 +28,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       url,
       siteName: "QBOX",
       type: "website",
-      images: image ? [{ url: image, width: 1200, height: 630, alt: title }] : [],
+      images: [{ url: image, width: 1200, height: 630, alt: title }],
     },
     twitter: {
-      card: image ? "summary_large_image" : "summary",
+      card: "summary_large_image",
       title,
       description,
-      images: image ? [image] : [],
+      images: [image],
     },
   };
 }

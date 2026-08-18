@@ -44,11 +44,6 @@ export function QuestionCard({ q, users, answerCount, myAccount }: {
       {q.title && <h3 className="mb-1 font-bold leading-snug">{q.title}</h3>}
       <p className="mb-2 line-clamp-3 whitespace-pre-wrap text-sm text-mut">{q.body}</p>
 
-      {q.image && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={q.image} alt="" className="mb-2 aspect-video w-full max-w-xs rounded-lg border border-borderline object-cover" />
-      )}
-
       <div className="flex flex-wrap items-center gap-2 text-xs text-mut">
         <span>→ {q.type === "all" ? "みんなへ" : targets.join(", ")}</span>
         <span className="ml-auto">

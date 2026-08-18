@@ -72,7 +72,6 @@ export async function POST(req: NextRequest) {
   // ログイン済みならアカウント紐付け(未ログインはnull=完全匿名)
   const me = await userFromRequest(req.headers.get("authorization"));
 
-  const image = body.image && typeof body.image === "string" ? String(body.image).slice(0, 500) : null;
   const now = new Date().toISOString();
   const q: Question = {
     id: genId("q"),
@@ -83,7 +82,7 @@ export async function POST(req: NextRequest) {
     editToken: randomBytes(16).toString("hex"),
     title,
     body: text,
-    image,
+    image: null,
     xUrl: null,
     status: "open",
     bestAnswerId: null,

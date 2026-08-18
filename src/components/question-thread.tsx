@@ -2,7 +2,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { ImageInput } from "@/components/image-input";
 import { QUESTION_TYPE_LABEL } from "@/lib/const";
 import type { QuestionType } from "@/lib/const";
 import { isMyQuestion, getEditToken, saveMyQuestion } from "@/components/question-form";
@@ -59,7 +58,6 @@ export function QuestionThread({ initial, questionUrl }: {
   const [answers, setAnswers] = useState<ThreadAns[]>(initial.answers);
   const [body, setBody] = useState("");
   const [fromName, setFromName] = useState("");
-  const [image, setImage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -77,7 +75,7 @@ export function QuestionThread({ initial, questionUrl }: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ body, fromName, image }),
+        body: JSON.stringify({ body, fromName }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -90,7 +88,7 @@ export function QuestionThread({ initial, questionUrl }: {
         ...prev,
         { ...data.answer, isBest: false, user: { display, masked: "", anonymous: !fromName.trim() } },
       ]);
-      setBody(""); setImage(null); setFromName("");
+      setBody(""); setFromName("");
     } finally {
       setBusy(false);
     }
@@ -148,11 +146,6 @@ export function QuestionThread({ initial, questionUrl }: {
 
         {q.title && <h1 className="mb-2 text-xl font-bold leading-snug">{q.title}</h1>}
         <p className="whitespace-pre-wrap leading-relaxed">{q.body}</p>
-
-        {q.image && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={q.image} alt="添付画像" className="mt-3 aspect-video w-full max-w-md rounded-xl border border-borderline object-cover" />
-        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-mut">
           <span>
@@ -214,7 +207,6 @@ export function QuestionThread({ initial, questionUrl }: {
               rows={4}
               className="w-full resize-y rounded-lg border border-borderline bg-background px-3 py-2 outline-none focus:border-x"
             />
-            <ImageInput onChange={setImage} label="回答の画像もXでのOGPプレビューに使えます(各自でXに貼り付けて投稿)" />
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button
               onClick={submitAnswer}
@@ -246,10 +238,6 @@ export function QuestionThread({ initial, questionUrl }: {
                 {a.isBest && <span className="rounded-full bg-best/20 px-2 py-0.5 font-bold text-best">ベストアンサー ★</span>}
               </div>
               <p className="whitespace-pre-wrap leading-relaxed">{a.body}</p>
-              {a.image && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={a.image} alt="回答画像" className="mt-2 aspect-video w-full max-w-xs rounded-lg border border-borderline object-cover" />
-              )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <a
                   href={xShareUrl(answerShareText(a), questionUrl)}

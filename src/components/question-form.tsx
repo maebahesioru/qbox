@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ImageInput } from "@/components/image-input";
 
 type QuestionType = "direct" | "multi" | "all";
 
@@ -108,7 +107,6 @@ export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreate
   const [fromName, setFromName] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [image, setImage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<null | { qid: string }>(null);
@@ -123,7 +121,7 @@ export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreate
       const res = await fetch("/api/questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, toUserIds, fromName, title, body, image }),
+        body: JSON.stringify({ type, toUserIds, fromName, title, body }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -132,14 +130,14 @@ export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreate
       }
       // 編集トークンを保存(ベストアンサー選定に使用)
       saveMyQuestion(data.question.id, data.editToken);
-      setTitle(""); setBody(""); setImage(null); setFromName("");
+      setTitle(""); setBody(""); setFromName("");
       if (!fixedTo) { setToUserIds([]); setType("all"); }
       setDone({ qid: data.question.id });
       if (onCreated) onCreated();
     } finally {
       setBusy(false);
     }
-  }, [type, toUserIds, fromName, title, body, image, fixedTo, onCreated]);
+  }, [type, toUserIds, fromName, title, body, fixedTo, onCreated]);
 
   return (
     <div className="rounded-2xl border border-borderline bg-panel p-5">
@@ -197,7 +195,9 @@ export function QuestionForm({ defaultType = "all", toUserIds: fixedTo, onCreate
           rows={compact ? 2 : 4}
           className="w-full resize-y rounded-lg border border-borderline bg-background px-3 py-2 outline-none focus:border-x"
         />
-        <ImageInput onChange={setImage} label="添付画像は質問ページのOGP画像になり、Xでリンクを貼ると画像がプレビュー表示されます(疑似画像貼り付け)" />
+        <p className="text-xs text-mut">
+          質問の内容は自動で画像化され、Xでリンクを貼ると本文がカード画像としてプレビュー表示されます(実質画像の貼り付け)。
+        </p>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <button
           onClick={submit}

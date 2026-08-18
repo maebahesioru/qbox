@@ -24,7 +24,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ ok: false, error: "回答は2000文字以内で入力してください" }, { status: 400 });
   }
 
-  const image = body.image && typeof body.image === "string" ? String(body.image).slice(0, 500) : null;
   const me = await userFromRequest(req.headers.get("authorization"));
 
   const answer: Answer = {
@@ -34,7 +33,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     fromName,
     editToken: randomBytes(16).toString("hex"),
     body: text,
-    image,
+    image: null,
     xUrl: null,
     createdAt: new Date().toISOString(),
   };
