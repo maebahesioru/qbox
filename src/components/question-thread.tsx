@@ -169,7 +169,6 @@ export function QuestionThread({ initial, questionUrl }: {
           </span>
           <span className="ml-auto">
             質問者: <span className={q.fromUser.anonymous ? "" : "font-bold"}>{q.fromUser.display}</span>
-            {q.fromUser.masked && <span className="text-mut">({q.fromUser.masked})</span>}
           </span>
         </div>
 

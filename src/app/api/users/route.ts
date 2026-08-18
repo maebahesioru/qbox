@@ -1,15 +1,14 @@
-// ユーザー一覧(質問先の選択用・番号はマスクして表示)
+// ユーザー一覧(質問先の選択用・アカウント番号は公開しない・公開IDのみ返す)
 import { NextRequest, NextResponse } from "next/server";
-import { getUsers, userFromRequest } from "@/lib/auth";
+import { getUsers, publicUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  // 認証不要で見れる(質問先の検索用)
+export async function GET(_req: NextRequest) {
   const users = await getUsers();
   const list = Object.values(users)
     .map((u) => ({
-      accountNumber: u.accountNumber,
+      publicId: publicUserId(u.accountNumber), // 生番号は返さない
       displayName: u.displayName,
       bio: u.bio,
       createdAt: u.createdAt,

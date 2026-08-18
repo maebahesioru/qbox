@@ -38,6 +38,22 @@ export function formatAccountNumber(n: string): string {
   return n.replace(/(\d{4})(?=\d)/g, "$1 ");
 }
 
+// 公開ID: アカウント番号を画面やAPIに直接出さないための隠蔽ID(u_xxxxxxxxxxxxxxxx)
+// 質問先の指定にはこちらを使う。サーバー内で生番号に解決する。
+export function publicUserId(accountNumber: string): string {
+  return "u_" + createHash("sha256").update(accountNumber).digest("hex").slice(0, 16);
+}
+
+// 公開ID(u_xxx)をアカウント番号に解決(なければ null)
+export function resolvePublicUserId(publicId: string, users: Record<string, User>): string | null {
+  if (publicId.startsWith("u_")) {
+    const found = Object.values(users).find((u) => publicUserId(u.accountNumber) === publicId);
+    return found ? found.accountNumber : null;
+  }
+  // 生番号(ユーザーページの質問箱URL由来)も許容するが、存在確認のみ
+  return users[publicId] ? publicId : null;
+}
+
 export async function getUsers(): Promise<Record<string, User>> {
   return readJson<Record<string, User>>("users.json", {});
 }

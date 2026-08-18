@@ -2,13 +2,13 @@
 // 質問はログイン不要・匿名で投稿できる(質問箱の本質)
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { getUsers, userFromRequest } from "@/lib/auth";
+import { getUsers, userFromRequest, resolvePublicUserId } from "@/lib/auth";
 import { genId, getQuestions, saveQuestions, Question, QuestionType } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 // 質問一覧
-// ?type=direct|multi|all&to=<accountNumber>&mine=true(ログイン中・自分の質問)
+// ?type=direct|multi|all&to=<公開ID or 番号>&mine=true(ログイン中・自分の質問)
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const type = sp.get("type");
@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
 
   let qs = await getQuestions();
   if (type) qs = qs.filter((q) => q.type === type);
-  if (to) qs = qs.filter((q) => q.toUserIds.includes(to));
+  if (to) {
+    const users = await getUsers();
+    const resolved = resolvePublicUserId(to, users);
+    if (resolved) qs = qs.filter((q) => q.toUserIds.includes(resolved));
+  }
   if (mine) {
     const me = await userFromRequest(req.headers.get("authorization"));
     if (!me) return NextResponse.json({ ok: false, error: "ログインが必要です" }, { status: 401 });
@@ -52,7 +56,11 @@ export async function POST(req: NextRequest) {
   let toUserIds: string[] = [];
   if (type === "direct" || type === "multi") {
     const raw = Array.isArray(body.toUserIds) ? body.toUserIds : [body.toUserIds].filter(Boolean);
-    toUserIds = raw.map((x: unknown) => String(x)).filter((id: string) => users[id]);
+    // 公開ID(u_xxx) or 生番号(質問箱URL由来) を生番号に解決
+    toUserIds = raw
+      .map((x: unknown) => String(x))
+      .map((id: string) => resolvePublicUserId(id, users) || "")
+      .filter((id: string) => id && users[id]);
     if (toUserIds.length === 0) {
       return NextResponse.json({ ok: false, error: type === "direct" ? "質問先のユーザーを指定してください" : "質問先のユーザーを1人以上指定してください" }, { status: 400 });
     }

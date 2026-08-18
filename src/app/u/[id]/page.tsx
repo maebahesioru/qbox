@@ -34,9 +34,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-x/20 text-2xl">📮</div>
           <div>
             <h1 className="text-lg font-bold">{u.displayName}</h1>
-            <p className="text-sm text-mut">
-              {u.accountNumber.slice(0, 4)}•••• •••• •••• ••••
-            </p>
+            <p className="text-sm text-mut">ID非公開</p>
           </div>
         </div>
         {u.bio && <p className="mt-3 whitespace-pre-wrap text-sm">{u.bio}</p>}

@@ -6,7 +6,7 @@ import { ImageInput } from "@/components/image-input";
 type QuestionType = "direct" | "multi" | "all";
 
 interface U {
-  accountNumber: string;
+  publicId: string;
   displayName: string;
   bio: string;
 }
@@ -25,9 +25,7 @@ function TargetSelect({ type, value, onChange }: { type: QuestionType; value: st
 
   if (type === "all") return null;
 
-  const filtered = users.filter(
-    (u) => u.displayName.includes(q) || u.accountNumber.includes(q.replace(/[^0-9]/g, "")),
-  );
+  const filtered = users.filter((u) => u.displayName.includes(q));
 
   function toggle(id: string) {
     if (type === "direct") {
@@ -49,19 +47,19 @@ function TargetSelect({ type, value, onChange }: { type: QuestionType; value: st
       <div className="max-h-44 overflow-y-auto rounded-lg border border-borderline bg-black/20">
         {filtered.length === 0 && <p className="p-3 text-sm text-mut">該当するユーザーがいません</p>}
         {filtered.map((u) => {
-          const on = value.includes(u.accountNumber);
+          const on = value.includes(u.publicId);
           return (
             <button
-              key={u.accountNumber}
+              key={u.publicId}
               type="button"
-              onClick={() => toggle(u.accountNumber)}
+              onClick={() => toggle(u.publicId)}
               className={`flex w-full items-center gap-2 border-b border-borderline/50 px-3 py-2 text-left text-sm last:border-0 hover:bg-panel ${on ? "bg-x/10" : ""}`}
             >
               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-xs ${type === "direct" ? "rounded-full" : "rounded"} ${on ? "bg-x text-white" : "border border-borderline"}`}>
                 {on ? "✓" : ""}
               </span>
               <span className="font-bold">{u.displayName}</span>
-              <span className="ml-auto text-xs text-mut">{u.accountNumber.slice(0, 4)}••••</span>
+              <span className="ml-auto text-xs text-mut">ID非公開</span>
             </button>
           );
         })}

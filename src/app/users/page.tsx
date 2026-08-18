@@ -43,7 +43,7 @@ export default async function UsersPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-x/20">📮</div>
                 <div className="min-w-0">
                   <p className="truncate font-bold">{u.displayName}</p>
-                  <p className="text-xs text-mut">{u.accountNumber.slice(0, 4)}••••</p>
+                  <p className="text-xs text-mut">ID非公開</p>
                 </div>
               </div>
               {u.bio && <p className="mt-2 line-clamp-2 text-sm text-mut">{u.bio}</p>}
